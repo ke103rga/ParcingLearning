@@ -1,14 +1,21 @@
 from bs4 import BeautifulSoup
 import requests
 import os
+import asyncio
+import aiohttp
 
 
-def get_html_first_page(file_name, url):
-    q = requests.get(url)
-    text = q.text
+async def get_html_first_page(file_name, url):
+    # response = await aiohttp.request('GET', url)
+    # text = response.text()
+    #
+    # with open(file_name, "w", encoding="utf-8") as file:
+    #     file.write(text)
 
-    with open(file_name, "w", encoding="utf-8") as file:
-        file.write(text)
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            print(resp.status)
+            print(await resp.text())
 
 
 def get_page_with_selenium(url, file_name):
@@ -23,8 +30,8 @@ def get_page_with_selenium(url, file_name):
         driver.quit()
 
 
-def get_links(soup, domen="https://roscarservis.ru"):
-    items = soup.find("div", class_="catalog__items-container").find_all("div", class_="catalog__item")
+async def get_links(soup, domen="https://roscarservis.ru"):
+    items = await soup.find("div", class_="catalog__items-container").find_all("div", class_="catalog__item")
     urls = list(map(lambda url: url.find("a", class_="catalog-item__img"), items))
     links = list(map(lambda link: f'{domen}{link.get("href")}', urls[:12]))
     return links
@@ -115,4 +122,4 @@ def get_wheel_data(link):
     return wheel_data
 
 
-print(get_wheel_data("wheel.html"))
+#print(get_wheel_data("wheel.html"))
