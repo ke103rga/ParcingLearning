@@ -1,5 +1,8 @@
 from selenium import webdriver
+from fp.fp import FreeProxy
+from fake_useragent import UserAgent
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.proxy import Proxy, ProxyType
 from selenium.webdriver.common.action_chains import ActionChains
 from bs4 import BeautifulSoup
 import json
@@ -8,11 +11,68 @@ import re
 import time
 
 
-driver = webdriver.Chrome("C:\\Users\\Виктория\\PycharmProjects\\UniversitiesParser\\chromedriver_win32\\chromedriver.exe")
+executable_path = "C:\\Users\\Виктория\\PycharmProjects\\UniversitiesParser\\chromedriver_win32\\chromedriver.exe"
 test_url = "https://omsk.zoon.ru/beauty/"
+site_home_url = "https://chelyabinsk.zoon.ru/"
 
 
-def get_whole_page(driver, url, download_file=None):
+def create_driver(exe_path=executable_path):
+    proxy = FreeProxy(country_id=['RU'], rand=True).get()
+    user_agent = UserAgent()
+    options = webdriver.ChromeOptions()
+    options.add_argument(f"--proxy-server={proxy[proxy.index('//')+2:]}")
+    options.add_argument(f"user-agent={user_agent.random}")
+    driver = webdriver.Chrome(executable_path=exe_path, options=options)
+
+    return driver
+
+
+def get_cities(url, driver=None):
+    if not driver:
+        driver = create_driver()
+    driver.get(url)
+    city_selector = driver.find_element(By.CLASS_NAME, "header-city-select")
+    city_selector.click()
+    time.sleep(5)
+
+    soup = BeautifulSoup(driver.page_source, "lxml")
+
+    cities_list = soup.find("ul", class_="header-city-select__suggest-results")
+    cities = {li.get("data-name"): li.find("a").get("href") for li in cities_list.find_all("li")}
+
+    driver.quit()
+    driver.close()
+
+    return cities
+
+
+def get_categories(city_link, driver=None):
+    if not driver:
+        driver = create_driver()
+
+    driver.get(city_link)
+    time.sleep(5)
+    soup = BeautifulSoup(driver.page_source, "lxml")
+
+    categories_list = soup.find("ul", class_="new-index-nav__slider-items nav-categories")\
+        .find_all("li", class_="nav-categories__item")
+    categories = {}
+    for li in categories_list:
+        link = li.find("a")
+        if link:
+            print(link)
+            categories[link.find("div", class_="nav").find_next("div").tetx.strip()] = link.get("href")
+
+    driver.quit()
+    driver.close()
+
+    return categories
+
+
+def get_whole_page(url, driver=None, download_file=None):
+    if not driver:
+        driver = create_driver()
+
     driver.get(url)
     time.sleep(10)
 
@@ -94,10 +154,12 @@ def get_institution_data(url):
     return institution_data
 
 
-def parse_to_json(json_file):
+def parse_to_json(json_file, driver=None):
     institutions_info = []
+    if not driver:
+        driver = create_driver()
 
-    soup = get_whole_page(driver, test_url)
+    soup = get_whole_page(test_url, driver)
 
     urls = get_all_institutions(soup)
 
@@ -114,5 +176,29 @@ def parse_to_json(json_file):
         json.dump(institutions_info, json_file, indent=4, ensure_ascii=False)
 
 
-#parse_to_json("omsk_beauty_institutions.json")
+def parser():
+    driver = create_driver()
+    list_of_cities = get_cities(site_home_url, driver)
+
+    def choose(dict, alias):
+        print(f"The list of {alias[:-1]}ies, where you can to get data from:")
+        for name in dict.keys():
+            print(name)
+        while True:
+            item = input(f'Choose the {alias} where you want to get data -> ')
+            if item in dict.keys():
+                break
+            else:
+                print("You entered an incorrect name. Try again.")
+        return item
+
+    city = choose(list_of_cities, "city")
+    list_of_categories = get_categories(list_of_cities[city], driver)
+
+    category = choose(list_of_categories, "category")
+    category_url = list_of_categories[category]
+
+    parse_to_json(category_url)
+
+
 
